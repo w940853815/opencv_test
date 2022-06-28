@@ -4,9 +4,16 @@ import time
 
 
 class CaptureManager:
-    def __init__(self,capture, previewWindowManager = None, shouldMirrorPreview = False) -> None:
+    def __init__(
+        self,
+        capture,
+        previewWindowManager=None,
+        shouldMirrorPreview=False,
+        shouldConvertBitDepth10to8=True,
+    ) -> None:
         self.previewWindowManager = previewWindowManager
         self.shouldMirrorPreview = shouldMirrorPreview
+        self.shouldConvertBitDepth10to8 = shouldConvertBitDepth10to8
         self._capture = capture
         self._channel = 0
         self._enterdFrame = False
@@ -33,8 +40,14 @@ class CaptureManager:
     def frame(self):
         if self._enterdFrame and self._frame is None:
             _, self._frame = self._capture.retrieve(self._frame, self.channel)
+            if (
+                self.shouldConvertBitDepth10to8
+                and self._frame is not None
+                and self._frame.dtype == numpy.uint16
+            ):
+                self._frame = (self.frame >> 2).astype(numpy.uint8)
         return self._frame
-    
+
     @property
     def isWritingImage(self):
         return self._imageFilename is not None
@@ -44,7 +57,9 @@ class CaptureManager:
         return self._videoFilename is not None
 
     def enterFrame(self):
-        assert not self._enterdFrame, "previous enterFrame() has no matching exitFrame()"
+        assert (
+            not self._enterdFrame
+        ), "previous enterFrame() has no matching exitFrame()"
         if self._capture is not None:
             self._enterdFrame = self._capture.grab()
 
@@ -66,11 +81,11 @@ class CaptureManager:
                 self.previewWindowManager.show(mirroredFrame)
             else:
                 self.previewWindowManager.show(self._frame)
-        
+
         if self.isWritingImage:
             cv2.imwrite(self._imageFilename, self._frame)
             self._imageFilename = None
-        
+
         self._writeVideoFrame()
         self._frame = None
         self._enterdFrame = False
@@ -78,7 +93,9 @@ class CaptureManager:
     def writeImage(self, filename):
         self._imageFilename = filename
 
-    def startWritingVideo(self, filename, encoding = cv2.VideoWriter_fourcc('M','J','P','G')):
+    def startWritingVideo(
+        self, filename, encoding=cv2.VideoWriter_fourcc("M", "J", "P", "G")
+    ):
         self._videoFilename = filename
         self._videoEncoding = encoding
 
@@ -86,7 +103,7 @@ class CaptureManager:
         self._videoFilename = None
         self._videoEncoding = None
         self._videoWriter = None
-    
+
     def _writeVideoFrame(self):
         if not self.isWritingVideo:
             return
@@ -98,25 +115,31 @@ class CaptureManager:
                     return
                 else:
                     fps = self._fpsEstimate
-            size = (int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH)),int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+            size = (
+                int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+            )
             print(self._videoFilename, self._videoEncoding, fps, size)
-            self._videoWriter = cv2.VideoWriter(self._videoFilename, self._videoEncoding, 20, size)
+            self._videoWriter = cv2.VideoWriter(
+                self._videoFilename, self._videoEncoding, 20, size
+            )
         self._videoWriter.write(self._frame)
 
+
 class WindowManager:
-    def __init__(self, windowName, keypressCallback = None) -> None:
+    def __init__(self, windowName, keypressCallback=None) -> None:
         self.keypressCallback = keypressCallback
         self._windowName = windowName
         self._isWindowCreated = False
-    
+
     @property
     def isWindowCreated(self):
         return self._isWindowCreated
-    
+
     def createWindow(self):
         cv2.namedWindow(self._windowName)
         self._isWindowCreated = True
-    
+
     def show(self, frame):
         cv2.imshow(self._windowName, frame)
 
